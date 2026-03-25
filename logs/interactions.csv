@@ -1,0 +1,28 @@
+timestamp,intent,question,answer
+2026-03-25T10:18:06.849397,concept,Explain variables and data types in Java.,"That's a fantastic question to start with! Understanding variables and data types is fundamental to programming in Java, or any language for that matter. Let's break them down.
+
+### What are Data Types in Java?
+
+Think of **data types** as categories for the kind of information your program will work with. Just like in the real world, you have different types of data – whole numbers, decimal numbers, letters, true/false statements, etc. Java needs to know what *kind* of data you're storing so it "
+2026-03-25T10:20:09.815881,code_manual,"def factorial(n):
+    if n < 0:
+        return ""Factorial not defined for negative numbers""
+    elif n == 0 or n == 1:
+        return 1
+    else:
+        fact = 1
+        for i in range(2, n + 1):
+            fact *= i
+        return fact
+
+# Example usage
+num = 5
+print(f""The factorial of {num} is {factorial(num)}"")  # Output: The factorial of 5 is 120","Hi there! This is a great start to implementing the factorial function. Let's break down your code.
+
+### 1. What the student is trying to do:
+You are trying to write a Python function called `factorial` that calculates the factorial of a given non-negative integer `n`. You've also included logic to handle negative input numbers.
+
+### 2. Logical correctness:
+Your code is **logically correct**!
+*   It correctly handles the base cases for `n = 0` and `n = 1`, returning `1`.
+*   It correctly identif"
