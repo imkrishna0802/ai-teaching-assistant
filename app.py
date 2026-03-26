@@ -1,113 +1,135 @@
-import os
 import streamlit as st
-import pandas as pd
 
-from rag_chain import load_rag_chain
-from code_feedback import get_code_feedback
-from router import classify_query
-from logging_utils import log_interaction
-
-
+# ---------- BASIC PAGE SETUP ----------
 st.set_page_config(
     page_title="AI Teaching Assistant",
     page_icon="🎓",
-    layout="centered",
+    layout="wide",
 )
 
-st.title("🎓 AI Teaching Assistant")
-st.markdown("*Ask me anything about your course material, or get feedback on your code!*")
-st.divider()
+# ---------- FLOATING BOT (CSS + HTML via markdown) ----------
+FLOATING_BOT = """
+<style>
+#float-bot {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00e0ff, #007bff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+  cursor: pointer;
+  z-index: 9999;
+  animation: float 3s ease-in-out infinite;
+}
+#float-bot img {
+  width: 60%;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%    { transform: translateY(-10px); }
+}
 
-# Check FAISS index
-if not os.path.exists("faiss_index"):
-    st.error("⚠️ No course material loaded yet! Please run `ingest.py` first.")
-    st.code("python ingest.py", language="bash")
-    st.stop()
+/* typing animation dots used in chat */
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: #22d3ee;
+  display: inline-block;
+  animation: blink 1s infinite alternate;
+}
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
 
+@keyframes blink {
+  from { opacity: 0.2; transform: translateY(0); }
+  to   { opacity: 1;   transform: translateY(-2px); }
+}
+</style>
 
-@st.cache_resource
-def get_rag_chain():
-    return load_rag_chain()
+<div id="float-bot">
+  <img src="app/static/bot.png">
+</div>
+"""
 
+st.markdown(FLOATING_BOT, unsafe_allow_html=True)
 
-rag_chain = get_rag_chain()
+# ---------- MAIN HEADER ----------
+st.title("AI Teaching Assistant")
+st.caption("Ask me about your course material or get feedback on your code.")
 
-tab_qna, tab_code, tab_dashboard = st.tabs(
-    ["📚 Concept / Code Chat", "💻 Code Feedback (manual)", "📊 Instructor Dashboard"]
+# ---------- LAYOUT WITH TABS ----------
+tab1, tab2, tab3 = st.tabs(
+    ["💬 Concept / Code Chat", "🧑‍💻 Code Feedback (manual)", "📊 Instructor Dashboard"]
 )
 
-# --- Tab 1: Mixed Q&A with routing ---
-with tab_qna:
-    st.markdown("Ask conceptual questions or paste code with errors; I will decide whether to explain or debug.")
+# ---------- SESSION STATE FOR CHAT ----------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+BOT_AVATAR_URL = "app/static/bot.png"   # served via static folder
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# ---------- TAB 1: CHAT ----------
+with tab1:
+    st.subheader("Chat with your AI Tutor")
 
-    if prompt := st.chat_input("Ask a question or paste code..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
+    # Show existing conversation
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"], avatar=msg.get("avatar", None)):
+            st.markdown(msg["content"])
+
+    # User input at the bottom
+    prompt = st.chat_input("Ask anything about concepts or code...")
+
+    if prompt:
+        # 1. show user message
+        st.session_state.messages.append(
+            {"role": "user", "content": prompt, "avatar": "👨‍🎓"}
+        )
+        with st.chat_message("user", avatar="👨‍🎓"):
             st.markdown(prompt)
 
-        intent = classify_query(prompt)
+        # 2. show typing animation (fake streaming)
+        with st.chat_message("assistant", avatar=BOT_AVATAR_URL):
+            typing_placeholder = st.empty()
+            typing_placeholder.markdown(
+                '<span class="typing-dot"></span>'
+                '<span class="typing-dot"></span>'
+                '<span class="typing-dot"></span>',
+                unsafe_allow_html=True,
+            )
 
-        with st.chat_message("assistant"):
-            with st.spinner(f"Handling your {intent} question..."):
-                try:
-                    if intent == "code":
-                        answer = get_code_feedback(prompt, "python")
-                    else:
-                        answer = rag_chain(prompt)
-                except Exception as e:
-                    answer = "Sorry, something went wrong while processing your request."
-                    st.error(str(e))
+        # 3. here you would call your real LLM / backend
+        # For demo, just echo
+        answer = (
+            f"I received: `{prompt}`.\n\n"
+            "(Here I would explain the concept or review your code.)"
+        )
+
+        # 4. replace typing dots with real answer
+        with st.chat_message("assistant", avatar=BOT_AVATAR_URL):
             st.markdown(answer)
 
-        st.session_state.messages.append({"role": "assistant", "content": answer})
-        log_interaction(prompt, answer, intent)
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer, "avatar": BOT_AVATAR_URL}
+        )
 
-# --- Tab 2: Code Feedback (explicit) ---
-with tab_code:
+# ---------- TAB 2: MANUAL CODE FEEDBACK ----------
+with tab2:
     st.subheader("Get feedback on your code")
-    language = st.selectbox("Language", ["Python"], index=0)
+
+    lang = st.selectbox("Language", ["Python", "Java", "C++"])
     code = st.text_area("Paste your code here:", height=220)
+    if st.button("Analyze code"):
+        st.info("This is where you'll call your code analysis logic.")
 
-    if st.button("Analyze code", type="primary"):
-        if not code.strip():
-            st.warning("Please paste some code first.")
-        else:
-            with st.spinner("Running and analyzing your code..."):
-                try:
-                    feedback = get_code_feedback(code, language)
-                except Exception as e:
-                    feedback = "Sorry, something went wrong while analyzing your code."
-                    st.error(str(e))
-            st.markdown("### Tutor Feedback")
-            st.markdown(feedback)
-            log_interaction(code, feedback, intent="code_manual")
-
-# --- Tab 3: Instructor Dashboard ---
-with tab_dashboard:
-    st.subheader("Instructor Dashboard")
-
-    log_path = "logs/interactions.csv"
-    if not os.path.exists(log_path):
-        st.info("No data yet. Interact with the assistant to generate logs.")
-    else:
-        df = pd.read_csv(log_path)
-
-        st.markdown("**Total interactions:** " + str(len(df)))
-
-        if "intent" in df.columns:
-            st.markdown("#### Questions by type")
-            intent_counts = df["intent"].value_counts()
-            st.bar_chart(intent_counts)
-
-        df["question_len"] = df["question"].astype(str).str.len()
-        st.markdown("**Average question length:** " + str(round(df["question_len"].mean(), 2)))
-
-        st.markdown("#### Recent interactions")
-        st.dataframe(df.tail(20), use_container_width=True)
+# ---------- TAB 3: INSTRUCTOR DASHBOARD ----------
+with tab3:
+    st.subheader("Instructor dashboard (placeholder)")
+    st.write("You can add analytics and student progress here later.")
