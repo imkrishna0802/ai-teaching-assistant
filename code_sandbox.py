@@ -38,7 +38,7 @@ def run_python_code(code: str, timeout: int = 3) -> SandboxResult:
     except subprocess.TimeoutExpired as e:
         return SandboxResult(
             stdout=e.stdout or "",
-            stderr="Execution timed out after {timeout} seconds.",
+            stderr=f"Execution timed out after {timeout} seconds.",
             exit_code=-1,
             timeout=True,
         )

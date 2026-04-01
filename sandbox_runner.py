@@ -4,39 +4,48 @@ import tempfile
 import os
 import textwrap
 
+ALLOWED_IMAGES = {"code-sandbox-cpp", "code-sandbox-java"}
+ALLOWED_FILENAMES = {"main.py", "Main.java", "main.c", "main.cpp"}
 
 
 def _run_docker(image: str,
                 filename: str,
-                compile_cmd: str,
-                run_cmd: str,
+                compile_cmd: list,
+                run_cmd: list,
                 code: str,
                 timeout: int = 5) -> dict:
     """
     Write code to a temp file, mount into Docker container, compile + run,
     and return stdout/stderr/exit_code.
     """
+    if image not in ALLOWED_IMAGES:
+        raise ValueError(f"Disallowed Docker image: {image}")
+    if filename not in ALLOWED_FILENAMES:
+        raise ValueError(f"Disallowed filename: {filename}")
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        file_path = os.path.join(tmpdir, filename)
+        # Prevent path traversal: resolve and verify file stays inside tmpdir
+        file_path = os.path.realpath(os.path.join(tmpdir, filename))
+        if not file_path.startswith(os.path.realpath(tmpdir)):
+            raise ValueError("Path traversal detected")
+
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(textwrap.dedent(code))
 
-
-        # mount temp dir read-only into /sandbox
-        mount_arg = f"{tmpdir}:/sandbox:ro"
-
-
-        docker_cmd = (
-            f"docker run --rm --net=none "
-            f"--cpus=0.5 --memory=256m --pids-limit=64 "
-            f"-v {mount_arg} -w /sandbox {image} "
-            f"/bin/bash -lc '{compile_cmd} && {run_cmd}'"
-        )
-
+        # Build command as a list — no shell=True
+        docker_cmd = [
+            "docker", "run", "--rm", "--net=none",
+            "--cpus=0.5", "--memory=256m", "--pids-limit=64",
+            "-v", f"{tmpdir}:/sandbox:ro",
+            "-w", "/sandbox",
+            image,
+            "/bin/bash", "-lc",
+            " && ".join(compile_cmd + run_cmd),
+        ]
 
         proc = subprocess.run(
             docker_cmd,
-            shell=True,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout
@@ -60,13 +69,11 @@ def execute_code(language: str, code: str) -> dict:
 
 
     if lang == "python":
-        # Optional: keep Python execution as-is if you already have it.
-        # Here we just run `python main.py` in the cpp image to reuse base.
         return _run_docker(
             image="code-sandbox-cpp",
             filename="main.py",
-            compile_cmd="python -m py_compile main.py || true",
-            run_cmd="python main.py",
+            compile_cmd=["python", "-m", "py_compile", "main.py"],
+            run_cmd=["python", "main.py"],
             code=code,
         )
 
@@ -75,8 +82,8 @@ def execute_code(language: str, code: str) -> dict:
         return _run_docker(
             image="code-sandbox-java",
             filename="Main.java",
-            compile_cmd="javac Main.java",
-            run_cmd="java Main",
+            compile_cmd=["javac", "Main.java"],
+            run_cmd=["java", "Main"],
             code=code,
         )
 
@@ -85,8 +92,8 @@ def execute_code(language: str, code: str) -> dict:
         return _run_docker(
             image="code-sandbox-cpp",
             filename="main.c",
-            compile_cmd="gcc main.c -o main",
-            run_cmd="./main",
+            compile_cmd=["gcc", "main.c", "-o", "main"],
+            run_cmd=["./main"],
             code=code,
         )
 
@@ -95,8 +102,8 @@ def execute_code(language: str, code: str) -> dict:
         return _run_docker(
             image="code-sandbox-cpp",
             filename="main.cpp",
-            compile_cmd="g++ main.cpp -o main",
-            run_cmd="./main",
+            compile_cmd=["g++", "main.cpp", "-o", "main"],
+            run_cmd=["./main"],
             code=code,
         )
 
