@@ -2,9 +2,23 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-
+import re
 
 load_dotenv()
+
+MAX_QUERY_LENGTH = 2000
+_ALLOWED_QUERY_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _validate_query(query: str) -> str:
+    """Sanitize and validate user query before passing to the vector store."""
+    if not isinstance(query, str):
+        raise ValueError("Query must be a string")
+    query = query[:MAX_QUERY_LENGTH]
+    query = _ALLOWED_QUERY_PATTERN.sub("", query)
+    if not query.strip():
+        raise ValueError("Query is empty after sanitization")
+    return query
 
 
 
@@ -55,7 +69,7 @@ Your Response:
 
 
     def chain_fn(query: str) -> str:
-        # retrieve top‑k chunks
+        query = _validate_query(query)
         docs = vectorstore.similarity_search(query, k=3)
         context = "\n\n".join(d.page_content for d in docs)
 

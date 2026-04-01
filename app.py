@@ -1,11 +1,15 @@
 import os
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from chatbot import get_chatbot_response
 from code_feedback import get_code_feedback
 from router import classify_query
 from logging_utils import log_interaction
+from zoiee_ui import render_zoiee
 
 
 # ---------------- PAGE CONFIG ----------------
@@ -19,9 +23,6 @@ st.set_page_config(
 # ---------------- SESSION STATE ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-if "support_open" not in st.session_state:
-    st.session_state.support_open = False
 
 if "support_messages" not in st.session_state:
     st.session_state.support_messages = [
@@ -131,165 +132,134 @@ def get_support_response(user_message: str) -> str:
     )
 
 
-def render_support_chat():
+@st.dialog("🤖 Support Chat", width="large")
+def support_chat_dialog():
+    st.caption("Help with setup, errors, and app usage")
+
+    q1, q2 = st.columns(2)
+
+    with q1:
+        if st.button("How to use", key="support_quick_use"):
+            question = "How do I use this app?"
+            answer = get_support_response(question)
+            st.session_state.support_messages.append({"role": "user", "content": question})
+            st.session_state.support_messages.append({"role": "assistant", "content": answer})
+            log_interaction(question, answer, intent="support")
+            st.rerun()
+
+        if st.button("Fix FAISS", key="support_quick_faiss"):
+            question = "FAISS is not working"
+            answer = get_support_response(question)
+            st.session_state.support_messages.append({"role": "user", "content": question})
+            st.session_state.support_messages.append({"role": "assistant", "content": answer})
+            log_interaction(question, answer, intent="support")
+            st.rerun()
+
+    with q2:
+        if st.button("API key help", key="support_quick_api"):
+            question = "How to set Gemini API key?"
+            answer = get_support_response(question)
+            st.session_state.support_messages.append({"role": "user", "content": question})
+            st.session_state.support_messages.append({"role": "assistant", "content": answer})
+            log_interaction(question, answer, intent="support")
+            st.rerun()
+
+        if st.button("Import error", key="support_quick_import"):
+            question = "ModuleNotFoundError"
+            answer = get_support_response(question)
+            st.session_state.support_messages.append({"role": "user", "content": question})
+            st.session_state.support_messages.append({"role": "assistant", "content": answer})
+            log_interaction(question, answer, intent="support")
+            st.rerun()
+
+    st.markdown("---")
+
+    chat_box = st.container(height=320)
+    with chat_box:
+        for msg in st.session_state.support_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    support_prompt = st.text_input(
+        "Type your support message...",
+        key="support_dialog_input"
+    )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button("Send", key="support_send_btn", use_container_width=True):
+            if support_prompt.strip():
+                support_answer = get_support_response(support_prompt)
+                st.session_state.support_messages.append({"role": "user", "content": support_prompt})
+                st.session_state.support_messages.append({"role": "assistant", "content": support_answer})
+                log_interaction(support_prompt, support_answer, intent="support")
+                st.rerun()
+
+    with c2:
+        if st.button("Clear Chat", key="support_clear_btn", use_container_width=True):
+            st.session_state.support_messages = [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Hi! I’m your support assistant 👋\n\n"
+                        "Ask me about setup issues, app usage, code feedback problems, "
+                        "FAISS indexing, API key errors, or dashboard issues."
+                    ),
+                }
+            ]
+            st.rerun()
+
+
+def render_support_button():
     st.markdown("""
     <style>
-    .support-toggle-wrap {
+    .floating-support-wrap {
         position: fixed;
         left: 20px;
         bottom: 20px;
         z-index: 999999;
     }
 
-    .support-panel {
-        position: fixed;
-        left: 20px;
-        bottom: 95px;
-        width: 360px;
-        max-height: 520px;
-        overflow-y: auto;
-        background: rgba(6, 12, 28, 0.98);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 20px;
-        padding: 14px;
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-        z-index: 999998;
-    }
-
-    .support-heading {
-        font-size: 1rem;
-        font-weight: 700;
-        color: white;
-        margin-bottom: 4px;
-    }
-
-    .support-caption {
-        color: #94a3b8;
-        font-size: 0.88rem;
-        margin-bottom: 12px;
-    }
-
-    .support-btn button {
+    .floating-support-wrap .stButton > button {
         width: 62px !important;
         height: 62px !important;
+        min-width: 62px !important;
         border-radius: 999px !important;
         border: none !important;
         background: linear-gradient(135deg, #8b5cf6, #06b6d4) !important;
         color: white !important;
         font-size: 1.5rem !important;
         box-shadow: 0 18px 40px rgba(6, 182, 212, 0.30) !important;
+        padding: 0 !important;
     }
 
-    .support-panel .stTextInput input {
-        background: rgba(15, 23, 42, 0.92) !important;
-        color: #e5e7eb !important;
-        border: 1px solid rgba(148, 163, 184, 0.14) !important;
-        border-radius: 12px !important;
+    .floating-support-wrap .stButton > button:hover {
+        transform: scale(1.05);
+        border: none !important;
     }
 
     @media (max-width: 900px) {
-        .support-toggle-wrap {
+        .floating-support-wrap {
             left: 14px;
             bottom: 14px;
         }
 
-        .support-panel {
-            left: 14px;
-            bottom: 84px;
-            width: calc(100vw - 28px);
-            max-width: 360px;
+        .floating-support-wrap .stButton > button {
+            width: 56px !important;
+            height: 56px !important;
+            min-width: 56px !important;
+            font-size: 1.35rem !important;
         }
     }
     </style>
     """, unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown('<div class="support-toggle-wrap support-btn">', unsafe_allow_html=True)
-        if st.button("🤖", key="floating_support_btn"):
-            st.session_state.support_open = not st.session_state.support_open
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.session_state.support_open:
-        st.markdown('<div class="support-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="support-heading">Support Chat</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="support-caption">Help with setup, errors, and app usage</div>',
-            unsafe_allow_html=True
-        )
-
-        quick1, quick2 = st.columns(2)
-        with quick1:
-            if st.button("How to use", key="quick_use_btn"):
-                user_msg = "How do I use this app?"
-                st.session_state.support_messages.append({"role": "user", "content": user_msg})
-                st.session_state.support_messages.append(
-                    {"role": "assistant", "content": get_support_response(user_msg)}
-                )
-                st.rerun()
-
-            if st.button("Fix FAISS", key="quick_faiss_btn"):
-                user_msg = "FAISS is not working"
-                st.session_state.support_messages.append({"role": "user", "content": user_msg})
-                st.session_state.support_messages.append(
-                    {"role": "assistant", "content": get_support_response(user_msg)}
-                )
-                st.rerun()
-
-        with quick2:
-            if st.button("API key help", key="quick_api_btn"):
-                user_msg = "How to set Gemini API key?"
-                st.session_state.support_messages.append({"role": "user", "content": user_msg})
-                st.session_state.support_messages.append(
-                    {"role": "assistant", "content": get_support_response(user_msg)}
-                )
-                st.rerun()
-
-            if st.button("Import error", key="quick_import_btn"):
-                user_msg = "ModuleNotFoundError"
-                st.session_state.support_messages.append({"role": "user", "content": user_msg})
-                st.session_state.support_messages.append(
-                    {"role": "assistant", "content": get_support_response(user_msg)}
-                )
-                st.rerun()
-
-        st.markdown("---")
-
-        for msg in st.session_state.support_messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        support_prompt = st.text_input("Type your support message...", key="support_text_input")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if st.button("Send", key="send_support_btn"):
-                if support_prompt.strip():
-                    st.session_state.support_messages.append({"role": "user", "content": support_prompt})
-                    support_answer = get_support_response(support_prompt)
-                    st.session_state.support_messages.append({"role": "assistant", "content": support_answer})
-                    log_interaction(support_prompt, support_answer, intent="support")
-                    st.rerun()
-
-        with c2:
-            if st.button("Clear", key="clear_support_btn"):
-                st.session_state.support_messages = [
-                    {
-                        "role": "assistant",
-                        "content": (
-                            "Hi! I’m your support assistant 👋\n\n"
-                            "Ask me about setup issues, app usage, code feedback problems, "
-                            "FAISS indexing, API key errors, or dashboard issues."
-                        ),
-                    }
-                ]
-                st.rerun()
-
-        with c3:
-            if st.button("Close", key="close_support_btn"):
-                st.session_state.support_open = False
-                st.rerun()
-
+    container = st.container()
+    with container:
+        st.markdown('<div class="floating-support-wrap">', unsafe_allow_html=True)
+        if st.button("🤖", key="open_support_dialog_btn", help="Open support chat"):
+            support_chat_dialog()
         st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -479,7 +449,7 @@ load_custom_css()
 hero_col1, hero_col2 = st.columns([1.3, 0.7], gap="large")
 
 with hero_col1:
-    st.markdown('<div class="top-badge">AI-powered teaching platform</div>', unsafe_allow_html=True)
+    st.markdown('<div class="top-badge">🎨 MODERN UI LOADED ✨</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="hero-title">Your personal AI tutor for concepts, coding, and feedback.</div>',
         unsafe_allow_html=True
@@ -554,8 +524,8 @@ st.markdown("")
 
 
 # ---------------- TABS ----------------
-tab_qna, tab_code, tab_dashboard = st.tabs(
-    ["📚 Concept / Code Chat", "💻 Code Feedback", "📊 Instructor Dashboard"]
+tab_qna, tab_code, tab_dashboard, tab_zoiee = st.tabs(
+    ["📚 Concept / Code Chat", "💻 Code Feedback", "📊 Instructor Dashboard", "🤖 Zoiee"]
 )
 
 
@@ -684,5 +654,10 @@ with tab_dashboard:
         st.dataframe(df.tail(20), use_container_width=True)
 
 
-# ---------------- FLOATING SUPPORT CHAT ----------------
-render_support_chat()
+# ---------------- ZOIEE TAB ----------------
+with tab_zoiee:
+    render_zoiee()
+
+
+# ---------------- FLOATING SUPPORT BUTTON ----------------
+render_support_button()
